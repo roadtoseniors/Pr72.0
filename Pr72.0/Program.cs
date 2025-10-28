@@ -10,7 +10,7 @@ namespace Pr72._0
     {
         static List<Parts> part;
         static int id;
-        static int balance;
+        static decimal balance;
         static int markup;
         static decimal num;
         static int count = 0;
@@ -18,6 +18,7 @@ namespace Pr72._0
         static bool clientServiced = false;
 
         static Dictionary<string, int> partsToBuy = new Dictionary<string, int>();
+
         static void Main(string[] args)
         {
             markup = 1000;
@@ -33,12 +34,11 @@ namespace Pr72._0
             }
             Console.WriteLine("-------------------------------------------------");
 
-
             Console.WriteLine("К вам пришел новый клиент, у него сломалась деталь");
             int inkrement = 1;
+
             while (true)
             {
-
                 if (playerBuying)
                 {
                     if (count == 2)
@@ -47,8 +47,10 @@ namespace Pr72._0
                         playerBuying = false;
                         foreach (var partToBuy in partsToBuy)
                         {
-                            Core.Context.Parts.First(p => p.Name == partToBuy.Key).Count += partToBuy.Value;
+                            var partItem = Core.Context.Parts.First(p => p.Name == partToBuy.Key);
+                            partItem.Count += partToBuy.Value;
                         }
+                        Core.Context.SaveChanges();
                         partsToBuy.Clear();
                     }
                     else
@@ -59,24 +61,25 @@ namespace Pr72._0
 
                 clientServiced = false;
                 Random randomID = new Random();
-                id = randomID.Next(1, part.Count);
+                id = randomID.Next(0, part.Count); 
 
                 while (!clientServiced)
                 {
                     Console.WriteLine($"Клиент {inkrement++}");
                     Console.WriteLine($"Поломка: {part[id].Name}");
                     Console.WriteLine($"Стоимость ремонта {part[id].Price + markup}");
-
                     Console.WriteLine("-------------------------------------------------");
 
                     Console.WriteLine("Выберите действие: ");
                     Console.WriteLine("1. Вывести весь список");
                     Console.WriteLine("2. Согласится на ремонт");
                     Console.WriteLine("3. Не соглашатся на ремонт");
-                    Console.WriteLine("4. Докупить детали говна");
+                    Console.WriteLine("4. Докупить детали");
 
                     Console.WriteLine("-------------------------------------------------");
-                    while (!int.TryParse(Console.ReadLine(), out int choice))
+
+                   
+                    if (int.TryParse(Console.ReadLine(), out int choice))
                     {
                         switch (choice)
                         {
@@ -99,6 +102,10 @@ namespace Pr72._0
                                 break;
                         }
                     }
+                    else
+                    {
+                        Console.WriteLine("Некорректный ввод. Введите число от 1 до 4.");
+                    }
                 }
             }
         }
@@ -111,7 +118,8 @@ namespace Pr72._0
 
             foreach (Parts part2 in part)
             {
-                Console.WriteLine($"{part2.Name}; {part2.Price}; {part2.Count}");}
+                Console.WriteLine($"{part2.Name}; {part2.Price}; {part2.Count}");
+            }
 
             Console.WriteLine("-------------------------------------------------");
         }
@@ -119,18 +127,28 @@ namespace Pr72._0
         static void Agree()
         {
             Console.WriteLine("Вы согласились на ремонт");
-            if (part[id].Count == 0)
+
+            
+            var currentPart = Core.Context.Parts.Find(part[id].ID); 
+            if (currentPart == null)
             {
-                Console.WriteLine("Ты мудак!");
-                Console.WriteLine($"С вашего баланса списан штраф, теперь баланс составляет {balance - part[id].Price}");
+                Console.WriteLine("Деталь не найдена!");
+                return;
+            }
+
+            if (currentPart.Count == 0)
+            {
+                Console.WriteLine("Нет деали!");
+                balance -= currentPart.Price;
+                Console.WriteLine($"С вашего баланса списан штраф, теперь баланс составляет {balance}");
                 Console.WriteLine("-------------------------------------------------");
             }
             else
             {
-                Core.Context.Parts.Find(part[id].Count--);
+                currentPart.Count--; 
                 Core.Context.SaveChanges();
-                num = balance+part[id].Price + markup;
-                Console.WriteLine($"ремонт прошел успешно, ваш баланс составляет {num}");
+                balance += currentPart.Price + markup; 
+                Console.WriteLine($"Ремонт прошел успешно, ваш баланс составляет {balance}");
                 Console.WriteLine("-------------------------------------------------");
             }
         }
@@ -138,35 +156,76 @@ namespace Pr72._0
         static void Disagree()
         {
             Console.WriteLine("Вы не согласились на ремонт");
-            Console.WriteLine($"С вашего баланса будет списан штраф {part[id].Price}");
-            Console.WriteLine($"Теперь ваш баланс составляет {balance - part[id].Price}");
+            var currentPart = Core.Context.Parts.Find(part[id].ID); 
+            if (currentPart != null)
+            {
+                balance -= currentPart.Price; 
+                Console.WriteLine($"С вашего баланса будет списан штраф {currentPart.Price}");
+                Console.WriteLine($"Теперь ваш баланс составляет {balance}");
+            }
             Console.WriteLine("-------------------------------------------------");
         }
 
         static void BuyParts()
         {
-            while (true) 
+            while (true)
             {
-                foreach (Parts part in part)
+                Console.WriteLine("Доступные детали:");
+                foreach (Parts partItem in part) 
                 {
-                    Console.WriteLine(part.Name);
+                    Console.WriteLine($"{partItem.Name} - Цена: {partItem.Price}");
                 }
-                Console.WriteLine("Введите детали для покупки");
+
+                Console.WriteLine("Введите название детали для покупки:");
                 string namePart = Console.ReadLine();
-                Console.WriteLine("Количество");
-                if (int.TryParse(Console.ReadLine(), out int partsCount))
+
+               
+                var partToBuy = Core.Context.Parts.FirstOrDefault(p => p.Name == namePart);
+                if (partToBuy == null)
                 {
-                    partsToBuy.Add(namePart, partsCount);
+                    Console.WriteLine("Деталь с таким названием не найдена!");
+                    continue;
                 }
-                balance -= (int)(Core.Context.Parts.First(p => p.Name == namePart).Price * partsCount);
-                playerBuying = true;
-                Console.WriteLine("Хотите ещё купить?");
-                if(Console.ReadLine() == "нет")
+
+                Console.WriteLine("Количество:");
+                if (int.TryParse(Console.ReadLine(), out int partsCount) && partsCount > 0)
+                {
+                    decimal totalCost = partToBuy.Price * partsCount;
+
+                   
+                    if (totalCost > balance)
+                    {
+                        Console.WriteLine($"Недостаточно средств! Нужно: {totalCost}, доступно: {balance}");
+                        continue;
+                    }
+
+                   
+                    if (partsToBuy.ContainsKey(namePart))
+                    {
+                        partsToBuy[namePart] += partsCount;
+                    }
+                    else
+                    {
+                        partsToBuy.Add(namePart, partsCount);
+                    }
+
+                    balance -= totalCost; 
+                    playerBuying = true;
+
+                    Console.WriteLine($"Добавлено в корзину: {namePart} x{partsCount}");
+                    Console.WriteLine($"Текущий баланс: {balance}");
+                }
+                else
+                {
+                    Console.WriteLine("Некорректное количество!");
+                }
+
+                Console.WriteLine("Хотите ещё купить? (да/нет)");
+                if (Console.ReadLine().ToLower() == "нет")
                 {
                     break;
                 }
             }
-
         }
     }
 }
